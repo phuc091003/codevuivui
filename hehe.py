@@ -2,7 +2,7 @@ import turtle
 
 # Thiết lập màn hình
 screen = turtle.Screen()
-screen.bgcolor("white")
+screen.bgcolor("Black")
 
 # Hàm vẽ một cánh hoa
 def draw_petal(t, radius, angle):

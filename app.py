@@ -156,7 +156,7 @@ def send_email(to_email, subject, body, attachment_filename, insights, image_fil
         part['Content-Disposition'] = f'attachment; filename="{attachment_filename}"'
         msg.attach(part)
 
-    # Đính kèm hình ảnh nếu có
+    # Đính kèm hình ảnh
     if image_filename:
         with open(image_filename, "rb") as img_attachment:
             img_part = MIMEApplication(img_attachment.read(), Name=image_filename)

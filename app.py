@@ -53,62 +53,12 @@ def run_query(query):
     finally:
         conn.close()
 
-# Tải mô hình NLP Hugging Face
-@st.cache_resource
-def load_nlp_model():
-    model_name = "Salesforce/codet5-base"  # Có thể thay thế bằng mô hình khác như "t5-small"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-    return tokenizer, model
-
-# Hàm chuyển đổi câu hỏi tự nhiên thành câu lệnh SQL
-def nlp_to_sql(question, table_schema="hotel_booking"):
-    try:
-        tokenizer, model = load_nlp_model()
-        prompt = f"Translate the following question into SQL query for the table {table_schema}:\n{question}"
-        inputs = tokenizer(prompt, return_tensors="pt", max_length=512, truncation=True)
-        outputs = model.generate(inputs.input_ids, max_length=128, num_beams=4, early_stopping=True)
-        sql_query = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        return sql_query
-    except Exception as e:
-        return f"Lỗi khi sử dụng mô hình NLP: {e}"
-
 # Tích hợp vào giao diện Streamlit
-with st.sidebar:
-    st.markdown("### 🤖 NLP Chuyển Đổi")
-    natural_language_question = st.text_area(
-        "Nhập câu hỏi tự nhiên (ví dụ: 'Hiển thị tất cả các đặt phòng trong tháng 12')", 
-        ""
-    )
-
-    if st.button("🛠️ Chuyển Đổi Thành SQL"):
-        if not natural_language_question:
-            st.error("Vui lòng nhập câu hỏi để chuyển đổi!")
-        else:
-            with st.spinner("Đang chuyển đổi..."):
-                generated_sql = nlp_to_sql(natural_language_question)
-                st.text_area("Câu lệnh SQL được tạo:", generated_sql)
-                
+with st.sidebar:  
     # Thêm tab hình ảnh của Dashboard trong Sidebar
     with st.sidebar:
      st.markdown("### 📸 Hình ảnh Dashboard")
-    image_file = st.file_uploader("Tải lên hình ảnh của Dashboard Power BI:", type=["jpg", "png", "jpeg"])
-
-    # Thực thi câu lệnh SQL đã chuyển đổi
-    if st.button("🚀 Thực Thi SQL Từ NLP"):
-        if not natural_language_question:
-            st.error("Vui lòng nhập câu hỏi trước!")
-        else:
-            if 'generated_sql' not in locals() or not generated_sql:
-                st.error("Không có câu lệnh SQL hợp lệ để thực thi!")
-            else:
-                with st.spinner("Đang xử lý..."):
-                    df = run_query(generated_sql)
-                    if df is not None:
-                        st.dataframe(df)
-                    else:
-                        st.error("Không thể thực thi câu lệnh SQL đã tạo.")
-
+    image_file = st.file_uploader("Tải lên hình ảnh của Dashboard Power BI:", type=["jpg", "png", "jpeg"], key="image_upload")
 # Tạo báo cáo PDF
 def create_pdf(report_text, insights, output_filename="report.pdf"):
     pdfmetrics.registerFont(TTFont('Roboto', 'Roboto-Black.ttf'))
@@ -156,7 +106,7 @@ def send_email(to_email, subject, body, attachment_filename, insights, image_fil
         part['Content-Disposition'] = f'attachment; filename="{attachment_filename}"'
         msg.attach(part)
 
-    # Đính kèm hình ảnh
+    # Đính kèm hình ảnh nếu có
     if image_filename:
         with open(image_filename, "rb") as img_attachment:
             img_part = MIMEApplication(img_attachment.read(), Name=image_filename)
@@ -171,6 +121,7 @@ def send_email(to_email, subject, body, attachment_filename, insights, image_fil
             st.success("Email đã được gửi thành công!")
     except Exception as e:
         st.error(f"Lỗi khi gửi email: {e}")
+        
 
 
 # Giao diện Streamlit
@@ -249,7 +200,7 @@ st.markdown("<h1 style='text-align:center'>🏨 Hotel Analytics Dashboard</h1>",
 with st.sidebar:
     st.markdown("### 🔍 Phân Tích")
     query = st.text_area("📝 SQL Query:", "SELECT * FROM hotel_booking LIMIT 10;", height=150)
-
+    # Hiển thị câu lệnh SQL sau khi người dùng chọn câu hỏi
     if st.button("🚀 Thực thi"):
         with st.spinner("Đang xử lý..."):
             df = run_query(query)
@@ -266,21 +217,58 @@ with st.sidebar:
         "Thống kê đặt trước",
         "So sánh doanh thu"
     ])
-
 # Main content
-if analysis == "Dashboard":
-    col1, col2 = st.columns([3, 1])
+# Insight
+direct_insights = """
+1. Tổng doanh thu và số lượng hủy phòng
+Tổng doanh thu: 46,34 triệu.
+Số lượng hủy phòng: 43 nghìn lượt.
+Đây là một con số đáng chú ý, cho thấy tỷ lệ hủy phòng có thể ảnh hưởng lớn đến doanh thu.
+2. Tỷ lệ hủy phòng theo mùa
+Tỷ lệ hủy phòng cao nhất vào mùa hè (Summer) với giá trị khoảng 0,377.
+Tỷ lệ hủy giảm dần qua các mùa:
+Mùa xuân (Spring): 0,36.
+Mùa thu (Autumn): 0,34.
+Mùa đông (Winter): 0,22 (thấp nhất).
+Mùa hè có tỷ lệ hủy phòng cao nhất, có thể do nhu cầu du lịch tăng cao nhưng khách hàng thay đổi kế hoạch thường xuyên.
+3. Tổng doanh thu theo mùa
+Doanh thu cao nhất vào mùa hè (Summer) với hơn 19,5 triệu.
+Các mùa khác:
+Mùa xuân (Spring): khoảng 11,7 triệu.
+Mùa thu (Autumn): khoảng 10,5 triệu.
+Mùa đông (Winter): thấp nhất, khoảng 4,6 triệu.
+Mùa hè là mùa cao điểm, mang lại doanh thu lớn nhất, trong khi mùa đông là mùa thấp điểm.
+4. Doanh thu theo loại khách hàng
+Phân bổ khách hàng:
+Transient (khách lẻ): chiếm tỷ lệ lớn nhất, khoảng 67,5%.
+Contract (hợp đồng): khoảng 12,4%.
+Group (nhóm): khoảng 11,2%.
+Transient-Party: khoảng 8,9%.
+Khách lẻ là nguồn doanh thu chính, trong khi khách nhóm và hợp đồng chiếm tỷ lệ nhỏ hơn.
+5. Số lượng đặt phòng theo tháng
+Số lượng đặt phòng cao nhất vào tháng 5 và thấp nhất là vào tháng 2.
+Số lượng đặt phòng tăng dần từ đầu năm, đạt đỉnh vào mùa hè (tháng 5), sau đó giảm dần vào cuối năm.
+6. Bản đồ phân bố
+Bản đồ hiển thị các điểm đặt phòng trên toàn cầu, tập trung chủ yếu ở các khu vực lớn như châu Âu, Bắc Mỹ, và Đông Á.
+Đề xuất và chiến lược:
 
-    with col2:
-        st.markdown("### 🔍 Nhập thông tin Insight từ Dashboard")
-        
-        # Ô nhập để người dùng cung cấp insight
-        insights = st.text_area("📝 Nhập các insight bạn thu thập được từ Dashboard Power BI:")
+1 Trong khi doanh thu và tỷ lệ đặt phòng thấp vào mùa đông, bạn có thể phát triển các chiến lược marketing đặc biệt cho thời gian này. Cung cấp các gói dịch vụ đặc biệt cho khách du lịch mùa đông như các tour du lịch, dịch vụ spa, hoặc các hoạt động trong nhà
+"""
 
-        # Hiển thị các insight đã nhập
-        if insights:
-            st.write(f"Những insight từ Dashboard: {insights}")
+# Khởi tạo trạng thái giao diện
+if "insight_visible" not in st.session_state:
+    st.session_state["insight_visible"] = True
 
+# Giao diện chính
+# Giao diện chính
+if "Dashboard":
+    # Điều chỉnh tỷ lệ cột theo trạng thái Insight
+    if st.session_state["insight_visible"]:
+        col1, col2 = st.columns([4, 1])
+    else:
+        col1, col2 = st.columns([5, 0.5])
+
+    # Cột chính hiển thị Power BI Dashboard
     with col1:
         with st.expander("📊 Power BI Dashboard", expanded=True):
             try:
@@ -289,12 +277,11 @@ if analysis == "Dashboard":
                 st.error(f"❌ Lỗi: {str(e)}")
 
         with st.expander("🔍 Phân Tích Dữ Liệu Trực Tiếp", expanded=False):
-            uploaded_file = st.file_uploader("📂 Tải lên tệp dữ liệu CSV:", type=["csv"])
+            uploaded_file = st.file_uploader("📂 Tải lên tệp dữ liệu CSV:", type=["csv"], key="csv_upload")
             if uploaded_file is not None:
                 data = pd.read_csv(uploaded_file)
                 st.markdown("#### 📈 Dữ liệu đã tải lên:")
                 st.dataframe(data.head(10))
-
                 st.markdown("#### 🛠️ Phân tích cơ bản:")
                 st.write("Số hàng và cột:", data.shape)
                 st.write("Thông tin dữ liệu:", data.describe())
@@ -303,6 +290,134 @@ if analysis == "Dashboard":
                     fig, ax = plt.subplots(figsize=(10, 6))
                     sns.histplot(data.iloc[:, 0], kde=True, ax=ax)
                     st.pyplot(fig)
+
+    # Cột phụ hiển thị khung nhập Insight
+    with col2:
+        # Nút toggle trạng thái ẩn/hiện Insight
+        toggle_button = "Ẩn" if st.session_state["insight_visible"] else "Hiện"
+        if st.button(f"🔄 {toggle_button} Insight"):
+            st.session_state["insight_visible"] = not st.session_state["insight_visible"]
+
+        if st.session_state["insight_visible"]:
+            st.markdown("### 🔍 Nhập thông tin Insight")
+            
+            # **Move the direct insights to an expandable section**
+            with st.expander("👉 Các Insight đã nhập:", expanded=False):
+                st.write(direct_insights)
+
+            # Hiển thị khung nhập thêm insight nếu cần
+            insights = st.text_area(
+                "📝 Nhập các insight bạn thu thập được từ Dashboard Power BI:",
+                height=200,
+            )
+            # Hiển thị các insight đã nhập
+            if insights.strip():
+                st.markdown("#### Những Insight đã nhập:")
+                st.write(insights)
+
+            # Thêm khung nhập trực tiếp Insight vào code
+            with st.expander("🔧 Tùy chỉnh hoặc xử lý Insight thêm", expanded=False):
+                st.code(insights, language="python")
+if analysis == "Tỷ lệ hủy đặt phòng":
+    st.markdown("### 📊 Tỷ lệ Hủy Đặt Phòng")
+    query = "SELECT is_canceled, COUNT(*) AS count FROM hotel_booking GROUP BY is_canceled"
+    df = run_query(query)
+
+    if df is not None:
+         # Hiển thị bảng dữ liệu
+        st.dataframe(df)
+        df['is_canceled'] = df['is_canceled'].map({0: 'Không hủy', 1: 'Hủy'})
+        fig, ax = plt.subplots(figsize=(8, 6))
+        sns.barplot(data=df, x='is_canceled', y='count', ax=ax, palette='viridis')
+        ax.set_title("Tỷ lệ Hủy Đặt Phòng")
+        ax.set_xlabel("Trạng Thái Hủy")
+        ax.set_ylabel("Số Lượng")
+        st.pyplot(fig)
+
+if analysis == "Doanh thu theo loại phòng":
+    st.markdown("### 📊 Doanh Thu Theo Loại Phòng")
+    query = """
+        SELECT assigned_room_type AS room_type, SUM(adr) AS revenue
+        FROM hotel_booking
+        WHERE is_canceled = 0
+        GROUP BY assigned_room_type
+        ORDER BY revenue DESC
+    """
+    df = run_query(query)
+
+    if df is not None:
+         # Hiển thị bảng dữ liệu
+        st.dataframe(df)
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.barplot(data=df, x='room_type', y='revenue', ax=ax, palette='coolwarm')
+        ax.set_title("Doanh Thu Theo Loại Phòng")
+        ax.set_xlabel("Loại Phòng")
+        ax.set_ylabel("Doanh Thu (ADR)")
+        st.pyplot(fig)
+
+if analysis == "Thời gian lưu trú":
+    st.markdown("### 📊 Thời Gian Lưu Trú")
+    query = """
+        SELECT 
+            (stays_in_weekend_nights + stays_in_week_nights) AS total_stay, 
+            COUNT(*) AS count
+        FROM hotel_booking
+        GROUP BY total_stay
+        ORDER BY total_stay
+    """
+    df = run_query(query)
+
+    if df is not None:
+         # Hiển thị bảng dữ liệu
+        st.dataframe(df)
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.barplot(data=df, x='total_stay', y='count', ax=ax, palette='muted')
+        ax.set_title("Phân Phối Thời Gian Lưu Trú")
+        ax.set_xlabel("Thời Gian Lưu Trú (Đêm)")
+        ax.set_ylabel("Số Lượng")
+        st.pyplot(fig)
+
+if analysis == "Thống kê đặt trước":
+    st.markdown("### 📊 Thống Kê Đặt Trước")
+    query = """
+        SELECT lead_time, COUNT(*) AS count
+        FROM hotel_booking
+        GROUP BY lead_time
+        ORDER BY lead_time
+        LIMIT 50
+    """
+    df = run_query(query)
+
+    if df is not None:
+         # Hiển thị bảng dữ liệu
+        st.dataframe(df)
+        fig, ax = plt.subplots(figsize=(12, 6))
+        sns.lineplot(data=df, x='lead_time', y='count', ax=ax, color='green', marker='o')
+        ax.set_title("Thống Kê Thời Gian Đặt Trước")
+        ax.set_xlabel("Thời Gian Đặt Trước (Ngày)")
+        ax.set_ylabel("Số Lượng")
+        st.pyplot(fig)
+
+if analysis == "So sánh doanh thu":
+    st.markdown("### 📊 So Sánh Doanh Thu Theo Năm")
+    query = """
+        SELECT arrival_date_year AS year, SUM(adr) AS revenue
+        FROM hotel_booking
+        WHERE is_canceled = 0
+        GROUP BY arrival_date_year
+        ORDER BY year
+    """
+    df = run_query(query)
+
+    if df is not None:
+         # Hiển thị bảng dữ liệu
+        st.dataframe(df)
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.barplot(data=df, x='year', y='revenue', ax=ax, palette='Spectral')
+        ax.set_title("So Sánh Doanh Thu Theo Năm")
+        ax.set_xlabel("Năm")
+        ax.set_ylabel("Doanh Thu (ADR)")
+        st.pyplot(fig)
 
 # Nhập thông tin người nhận email
 to_email = st.text_input("📧 Email người nhận:")
